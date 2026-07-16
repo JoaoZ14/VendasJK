@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Download, Plus, Upload } from 'lucide-react'
+import { Download, MapPin, Plus, Upload } from 'lucide-react'
 import styled from 'styled-components'
 import { useClients } from '../hooks/useClients'
 import {
+  CITY_ALL,
   type ClientFilter,
   useClientFilters,
 } from '../hooks/useClientFilters'
@@ -15,13 +16,12 @@ import {
 import type { ClientInsert } from '../types'
 import {
   CLIENT_TYPE_LABELS,
-  CLIENT_TYPES,
 } from '../types'
 import { ClientFormModal } from '../components/ClientFormModal'
 import { StatusBadge } from '../components/StatusSelect'
+import { useToast } from '../context/ToastContext'
 import {
   Button,
-  ChipButton,
   EmptyState,
   Input,
   Page,
@@ -37,36 +37,84 @@ import {
 import { clientsToCsv, downloadCsv, parseClientsCsv } from '../utils/csv'
 import { formatDate } from '../utils/helpers'
 
+const CITY_STORAGE_KEY = 'crm-clients-city-tab'
+
 const Toolbar = styled.div`
   display: flex;
   flex-direction: column;
   gap: ${({ theme }) => theme.space[3]};
 `
 
-const SearchRow = styled.div`
+const FilterRow = styled.div`
   display: grid;
-  grid-template-columns: 1fr 180px;
+  grid-template-columns: 1fr 160px 200px;
   gap: ${({ theme }) => theme.space[3]};
 
-  @media (max-width: 640px) {
+  @media (max-width: 800px) {
     grid-template-columns: 1fr;
   }
 `
 
-const FILTERS: { id: ClientFilter; label: string }[] = [
-  { id: 'all', label: 'Todos' },
+const TabBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${({ theme }) => theme.space[2]};
+`
+
+const CityTab = styled.button<{ $active?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space[2]};
+  height: 34px;
+  padding: 0 ${({ theme }) => theme.space[3]};
+  border-radius: ${({ theme }) => theme.radii.md};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  border: 1px solid
+    ${({ theme, $active }) =>
+      $active ? theme.colors.primary : theme.colors.border};
+  background: ${({ theme, $active }) =>
+    $active ? theme.colors.primaryMuted : theme.colors.surface};
+  color: ${({ theme, $active }) =>
+    $active ? theme.colors.primary : theme.colors.muted};
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.ink};
+    border-color: ${({ theme }) => theme.colors.borderHover};
+  }
+
+  small {
+    opacity: 0.75;
+    font-weight: ${({ theme }) => theme.fontWeights.regular};
+  }
+`
+
+const STATUS_OPTIONS: { id: ClientFilter; label: string }[] = [
+  { id: 'all', label: 'Todos os status' },
   { id: 'nao_contatado', label: 'Não contatados' },
   { id: 'aguardando_resposta', label: 'Aguardando' },
   { id: 'negociacao', label: 'Negociação' },
-  { id: 'cliente', label: 'Clientes' },
-  { id: 'perdido', label: 'Perdidos' },
   { id: 'follow_up_hoje', label: 'Follow-up hoje' },
+  { id: 'cliente', label: 'Clientes fechados' },
+  { id: 'perdido', label: 'Perdidos' },
   { id: 'sem_contato', label: 'Sem contato' },
 ]
+
+const PRIMARY_TYPES = ['empresa', 'landing', 'site', 'outro'] as const
+const LEGACY_TYPES = ['hotel', 'pousada', 'resort', 'hostel'] as const
+
+function loadSavedCity(): string {
+  try {
+    return localStorage.getItem(CITY_STORAGE_KEY) || CITY_ALL
+  } catch {
+    return CITY_ALL
+  }
+}
 
 export function ClientsPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { toast } = useToast()
   const { clients, loading, error, refresh } = useClients()
   const [daysWithout, setDaysWithout] = useState(7)
   const [modalOpen, setModalOpen] = useState(false)
@@ -80,8 +128,30 @@ export function ClientsPage() {
     setFilter,
     typeFilter,
     setTypeFilter,
+    cityFilter,
+    setCityFilter,
+    cityTabs,
     filtered,
   } = useClientFilters(clients, daysWithout)
+
+  useEffect(() => {
+    const saved = loadSavedCity()
+    if (saved !== CITY_ALL) setCityFilter(saved)
+  }, [setCityFilter])
+
+  useEffect(() => {
+    if (cityFilter === CITY_ALL) return
+    const stillExists = cityTabs.some((t) => t.key === cityFilter)
+    if (!stillExists) setCityFilter(CITY_ALL)
+  }, [cityTabs, cityFilter, setCityFilter])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CITY_STORAGE_KEY, cityFilter)
+    } catch {
+      // ignore
+    }
+  }, [cityFilter])
 
   useEffect(() => {
     const f = params.get('filter') as ClientFilter | null
@@ -97,6 +167,7 @@ export function ClientsPage() {
   async function handleCreate(payload: ClientInsert) {
     await createClient(payload)
     await refresh()
+    toast('Lead criado.', 'success')
   }
 
   async function handleImport(file: File) {
@@ -105,13 +176,14 @@ export function ClientsPage() {
       const text = await file.text()
       const rows = parseClientsCsv(text)
       if (rows.length === 0) {
-        alert('CSV vazio ou inválido.')
+        toast('CSV vazio ou inválido.', 'danger')
         return
       }
       await createClientsBulk(rows)
       await refresh()
+      toast(`${rows.length} leads importados.`, 'success')
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Falha na importação')
+      toast(err instanceof Error ? err.message : 'Falha na importação', 'danger')
     } finally {
       setBusy(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -129,6 +201,9 @@ export function ClientsPage() {
           <PageTitle>Clientes</PageTitle>
           <PageSubtitle>
             {filtered.length} de {clients.length} leads
+            {cityFilter !== CITY_ALL
+              ? ` · ${cityTabs.find((t) => t.key === cityFilter)?.label ?? ''}`
+              : ''}
           </PageSubtitle>
         </div>
         <Row>
@@ -156,45 +231,77 @@ export function ClientsPage() {
           </Button>
           <Button onClick={() => setModalOpen(true)}>
             <Plus size={16} />
-            Novo cliente
+            Novo lead
           </Button>
         </Row>
       </PageHeader>
 
       <Toolbar>
-        <SearchRow>
+        {cityTabs.length > 0 && (
+          <TabBar>
+            <CityTab
+              type="button"
+              $active={cityFilter === CITY_ALL}
+              onClick={() => setCityFilter(CITY_ALL)}
+            >
+              Todas
+              <small>{clients.length}</small>
+            </CityTab>
+            {cityTabs.map((t) => (
+              <CityTab
+                key={t.key}
+                type="button"
+                $active={cityFilter === t.key}
+                onClick={() => setCityFilter(t.key)}
+              >
+                <MapPin size={14} />
+                {t.label}
+                <small>{t.count}</small>
+              </CityTab>
+            ))}
+          </TabBar>
+        )}
+
+        <FilterRow>
           <Input
-            placeholder="Buscar por nome, cidade, responsável, tipo ou status…"
+            placeholder="Buscar por nome, responsável…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <Select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as ClientFilter)}
+            aria-label="Status"
+          >
+            {STATUS_OPTIONS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+                {f.id === 'sem_contato' ? ` (${daysWithout}d)` : ''}
+              </option>
+            ))}
+          </Select>
           <Select
             value={typeFilter}
             onChange={(e) =>
               setTypeFilter(e.target.value as typeof typeFilter)
             }
+            aria-label="Tipo"
           >
             <option value="all">Todos os tipos</option>
-            {CLIENT_TYPES.map((t) => (
+            {PRIMARY_TYPES.map((t) => (
               <option key={t} value={t}>
                 {CLIENT_TYPE_LABELS[t]}
               </option>
             ))}
+            <optgroup label="Hospedagem (legado)">
+              {LEGACY_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {CLIENT_TYPE_LABELS[t]}
+                </option>
+              ))}
+            </optgroup>
           </Select>
-        </SearchRow>
-        <Row>
-          {FILTERS.map((f) => (
-            <ChipButton
-              key={f.id}
-              type="button"
-              $active={filter === f.id}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label}
-              {f.id === 'sem_contato' ? ` (${daysWithout}d)` : ''}
-            </ChipButton>
-          ))}
-        </Row>
+        </FilterRow>
       </Toolbar>
 
       {loading ? (
@@ -206,11 +313,11 @@ export function ClientsPage() {
         </EmptyState>
       ) : filtered.length === 0 ? (
         <EmptyState>
-          <strong>Nenhum cliente encontrado</strong>
-          <span>Cadastre o primeiro ou ajuste os filtros.</span>
+          <strong>Nenhum lead nesta cidade</strong>
+          <span>Cadastre o primeiro ou mude a aba / filtros.</span>
           <Button onClick={() => setModalOpen(true)}>
             <Plus size={16} />
-            Novo cliente
+            Novo lead
           </Button>
         </EmptyState>
       ) : (

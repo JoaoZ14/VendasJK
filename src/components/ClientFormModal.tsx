@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -50,7 +50,7 @@ type FormValues = z.infer<typeof schema>
 function emptyValues(): FormValues {
   return {
     company_name: '',
-    type: 'hotel',
+    type: 'empresa',
     city: '',
     state: '',
     phone: '',
@@ -117,6 +117,7 @@ export function ClientFormModal({
   initial,
   title,
 }: Props) {
+  const [showMore, setShowMore] = useState(false)
   const {
     register,
     handleSubmit,
@@ -132,7 +133,17 @@ export function ClientFormModal({
   useEffect(() => {
     if (!open) return
     reset(initial ? fromClient(initial) : emptyValues())
+    setShowMore(Boolean(initial))
   }, [open, initial, reset])
+
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -147,7 +158,7 @@ export function ClientFormModal({
       <ModalPanel>
         <Stack $gap={5}>
           <PageTitle style={{ fontSize: '1.375rem' }}>
-            {title ?? (initial ? 'Editar cliente' : 'Novo cliente')}
+            {title ?? (initial ? 'Editar lead' : 'Novo lead')}
           </PageTitle>
           <form
             onSubmit={handleSubmit(async (values) => {
@@ -158,7 +169,7 @@ export function ClientFormModal({
             <Stack $gap={4}>
               <FormGrid>
                 <Field>
-                  <Label htmlFor="company_name">Empresa</Label>
+                  <Label htmlFor="company_name">Empresa / lead</Label>
                   <Input id="company_name" {...register('company_name')} />
                   {errors.company_name && (
                     <FieldError>{errors.company_name.message}</FieldError>
@@ -167,24 +178,29 @@ export function ClientFormModal({
                 <Field>
                   <Label htmlFor="type">Tipo</Label>
                   <Select id="type" {...register('type')}>
-                    {CLIENT_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {CLIENT_TYPE_LABELS[t]}
-                      </option>
-                    ))}
+                    <optgroup label="Vendas">
+                      {(['empresa', 'landing', 'site', 'outro'] as const).map(
+                        (t) => (
+                          <option key={t} value={t}>
+                            {CLIENT_TYPE_LABELS[t]}
+                          </option>
+                        ),
+                      )}
+                    </optgroup>
+                    <optgroup label="Hospedagem (legado)">
+                      {(
+                        ['hotel', 'pousada', 'resort', 'hostel'] as const
+                      ).map((t) => (
+                        <option key={t} value={t}>
+                          {CLIENT_TYPE_LABELS[t]}
+                        </option>
+                      ))}
+                    </optgroup>
                   </Select>
                 </Field>
                 <Field>
-                  <Label htmlFor="city">Cidade</Label>
-                  <Input id="city" {...register('city')} />
-                </Field>
-                <Field>
-                  <Label htmlFor="state">Estado</Label>
-                  <Input id="state" {...register('state')} />
-                </Field>
-                <Field>
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input id="phone" {...register('phone')} />
+                  <Label htmlFor="contact_name">Responsável</Label>
+                  <Input id="contact_name" {...register('contact_name')} />
                 </Field>
                 <Field>
                   <Label htmlFor="whatsapp">WhatsApp</Label>
@@ -196,37 +212,62 @@ export function ClientFormModal({
                   {errors.email && <FieldError>{errors.email.message}</FieldError>}
                 </Field>
                 <Field>
-                  <Label htmlFor="website">Site</Label>
-                  <Input id="website" {...register('website')} />
-                </Field>
-                <Field>
-                  <Label htmlFor="contact_name">Responsável</Label>
-                  <Input id="contact_name" {...register('contact_name')} />
-                </Field>
-                <Field>
-                  <Label htmlFor="contact_role">Cargo</Label>
-                  <Input id="contact_role" {...register('contact_role')} />
-                </Field>
-                <Field>
                   <Label htmlFor="status">Status</Label>
                   <StatusSelect
                     value={watch('status')}
                     onChange={(s) => setValue('status', s)}
                   />
                 </Field>
-                <Field>
-                  <Label htmlFor="next_follow_up_at">Próximo follow-up</Label>
-                  <Input
-                    id="next_follow_up_at"
-                    type="date"
-                    {...register('next_follow_up_at')}
-                  />
-                </Field>
               </FormGrid>
-              <Field>
-                <Label htmlFor="notes">Observações</Label>
-                <Textarea id="notes" {...register('notes')} />
-              </Field>
+
+              {!showMore ? (
+                <Button
+                  type="button"
+                  $variant="ghost"
+                  onClick={() => setShowMore(true)}
+                  style={{ alignSelf: 'flex-start' }}
+                >
+                  Mais detalhes
+                </Button>
+              ) : (
+                <>
+                  <FormGrid>
+                    <Field>
+                      <Label htmlFor="phone">Telefone</Label>
+                      <Input id="phone" {...register('phone')} />
+                    </Field>
+                    <Field>
+                      <Label htmlFor="website">Site</Label>
+                      <Input id="website" {...register('website')} />
+                    </Field>
+                    <Field>
+                      <Label htmlFor="city">Cidade</Label>
+                      <Input id="city" {...register('city')} />
+                    </Field>
+                    <Field>
+                      <Label htmlFor="state">Estado</Label>
+                      <Input id="state" {...register('state')} />
+                    </Field>
+                    <Field>
+                      <Label htmlFor="contact_role">Cargo</Label>
+                      <Input id="contact_role" {...register('contact_role')} />
+                    </Field>
+                    <Field>
+                      <Label htmlFor="next_follow_up_at">Próximo follow-up</Label>
+                      <Input
+                        id="next_follow_up_at"
+                        type="date"
+                        {...register('next_follow_up_at')}
+                      />
+                    </Field>
+                  </FormGrid>
+                  <Field>
+                    <Label htmlFor="notes">Observações</Label>
+                    <Textarea id="notes" {...register('notes')} />
+                  </Field>
+                </>
+              )}
+
               <Row $gap={3} style={{ justifyContent: 'flex-end' }}>
                 <Button type="button" $variant="ghost" onClick={onClose}>
                   Cancelar

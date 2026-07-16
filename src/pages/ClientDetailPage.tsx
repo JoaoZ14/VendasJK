@@ -30,6 +30,7 @@ import {
 } from '../types'
 import { ClientFormModal } from '../components/ClientFormModal'
 import { StatusSelect } from '../components/StatusSelect'
+import { useToast } from '../context/ToastContext'
 import {
   Button,
   Card,
@@ -128,6 +129,7 @@ const TimelineItem = styled.li`
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { toast } = useToast()
   const [client, setClient] = useState<Client | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
@@ -216,7 +218,7 @@ export function ClientDetailPage() {
 
   async function handleWhatsApp() {
     if (!client?.whatsapp) {
-      alert('Cliente sem WhatsApp cadastrado.')
+      toast('Cliente sem WhatsApp cadastrado.', 'danger')
       return
     }
     const msg =
@@ -236,7 +238,7 @@ export function ClientDetailPage() {
 
   async function handleEmail() {
     if (!client?.email) {
-      alert('Cliente sem email cadastrado.')
+      toast('Cliente sem email cadastrado.', 'danger')
       return
     }
     const body =

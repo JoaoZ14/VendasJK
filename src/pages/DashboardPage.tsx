@@ -117,8 +117,8 @@ export function DashboardPage() {
     <Page>
       <PageHeader>
         <div>
-          <PageTitle>Dashboard</PageTitle>
-          <PageSubtitle>O que importa agora no seu pipeline.</PageSubtitle>
+          <PageTitle>Hoje</PageTitle>
+          <PageSubtitle>Quem precisa de contato agora.</PageSubtitle>
         </div>
         <NextCta $size="lg" onClick={goNextClient} disabled={nextLoading}>
           {nextLoading ? <Loader2 size={18} /> : <ArrowRight size={18} />}
@@ -130,28 +130,16 @@ export function DashboardPage() {
 
       <StatsGrid>
         <StatCard>
-          <span>Total de clientes</span>
-          <strong>{stats.total}</strong>
+          <span>Follow-ups pendentes</span>
+          <strong>{stats.pendingFollowUps}</strong>
         </StatCard>
         <StatCard>
           <span>Contatados hoje</span>
           <strong>{stats.contactedToday}</strong>
         </StatCard>
         <StatCard>
-          <span>Follow-ups pendentes</span>
-          <strong>{stats.pendingFollowUps}</strong>
-        </StatCard>
-        <StatCard>
           <span>Em negociação</span>
           <strong>{stats.inNegotiation}</strong>
-        </StatCard>
-        <StatCard>
-          <span>Clientes fechados</span>
-          <strong>{stats.closed}</strong>
-        </StatCard>
-        <StatCard>
-          <span>Taxa de conversão</span>
-          <strong>{stats.conversionRate}%</strong>
         </StatCard>
       </StatsGrid>
 

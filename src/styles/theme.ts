@@ -14,10 +14,12 @@ export const theme = {
     accent: 'oklch(0.72 0.11 195)',
     danger: 'oklch(0.65 0.18 25)',
     dangerMuted: 'oklch(0.28 0.06 25)',
+    dangerHover: 'oklch(0.35 0.08 25)',
     success: 'oklch(0.72 0.14 155)',
     successMuted: 'oklch(0.26 0.05 155)',
     warning: 'oklch(0.78 0.12 85)',
     warningMuted: 'oklch(0.28 0.05 85)',
+    onPrimary: 'oklch(0.98 0 0)',
     overlay: 'oklch(0.05 0 0 / 0.72)',
   },
   fonts: {

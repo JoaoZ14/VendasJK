@@ -13,10 +13,39 @@ export interface PlaceSuggestion {
   state: string | null
 }
 
-export interface HotelResult {
+export type SearchCategoryId =
+  | 'hospedagem'
+  | 'alimentacao'
+  | 'comercio'
+  | 'servicos'
+  | 'saude'
+
+export interface SearchCategory {
+  id: SearchCategoryId
+  label: string
+}
+
+export const SEARCH_CATEGORIES: SearchCategory[] = [
+  { id: 'hospedagem', label: 'Hospedagem' },
+  { id: 'alimentacao', label: 'Alimentação' },
+  { id: 'comercio', label: 'Comércio' },
+  { id: 'servicos', label: 'Serviços' },
+  { id: 'saude', label: 'Saúde' },
+]
+
+/** Default focado em quem costuma precisar de site/landing. */
+export const DEFAULT_SEARCH_CATEGORIES: SearchCategoryId[] = [
+  'comercio',
+  'servicos',
+]
+
+/** Resultado OSM (antes era só hotel). */
+export interface PlaceResult {
   osmId: string
   name: string
   type: ClientType
+  category: SearchCategoryId
+  categoryLabel: string
   lat: number
   lon: number
   city: string | null
@@ -27,9 +56,11 @@ export interface HotelResult {
   address: string | null
 }
 
+/** @deprecated use PlaceResult */
+export type HotelResult = PlaceResult
+
 const NOMINATIM = 'https://nominatim.openstreetmap.org'
 
-/** Espelhos públicos — se um falhar, tenta o próximo */
 const OVERPASS_ENDPOINTS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.osm.ch/api/interpreter',
@@ -37,15 +68,29 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
 ]
 
-const TOURISM_TYPES = [
-  'hotel',
-  'guest_house',
-  'hostel',
-  'motel',
-  'resort',
-  'chalet',
-  'apartment',
-] as const
+const RESULT_LIMIT = 120
+
+const CATEGORY_QUERIES: Record<
+  SearchCategoryId,
+  (around: string) => string[]
+> = {
+  hospedagem: (around) => [
+    `nwr["tourism"~"^(hotel|guest_house|hostel|motel|resort|chalet|apartment)$"]${around}`,
+  ],
+  alimentacao: (around) => [
+    `nwr["amenity"~"^(restaurant|cafe|bar|fast_food|pub|ice_cream|food_court|biergarten)$"]${around}`,
+  ],
+  comercio: (around) => [`nwr["shop"]${around}`],
+  servicos: (around) => [
+    `nwr["office"]${around}`,
+    `nwr["craft"]${around}`,
+    `nwr["amenity"~"^(bank|atm|car_rental|car_wash|laundry|hairdresser|beauty_salon|fuel)$"]${around}`,
+  ],
+  saude: (around) => [
+    `nwr["amenity"~"^(hospital|clinic|doctors|dentist|pharmacy|veterinary)$"]${around}`,
+    `nwr["healthcare"]${around}`,
+  ],
+}
 
 function mapTourismType(tourism: string | undefined): ClientType {
   switch (tourism) {
@@ -54,24 +99,77 @@ function mapTourismType(tourism: string | undefined): ClientType {
     case 'guest_house':
     case 'chalet':
     case 'apartment':
+    case 'motel':
       return 'pousada'
     case 'hostel':
       return 'hostel'
     case 'resort':
       return 'resort'
     default:
-      return 'outro'
+      return 'empresa'
   }
 }
 
-const RESULT_LIMIT = 100
+function detectCategory(tags: Record<string, string>): SearchCategoryId {
+  const tourism = tags.tourism
+  if (
+    tourism &&
+    /^(hotel|guest_house|hostel|motel|resort|chalet|apartment)$/.test(tourism)
+  ) {
+    return 'hospedagem'
+  }
+  if (
+    tags.amenity &&
+    /^(restaurant|cafe|bar|fast_food|pub|ice_cream|food_court|biergarten)$/.test(
+      tags.amenity,
+    )
+  ) {
+    return 'alimentacao'
+  }
+  if (
+    tags.amenity &&
+    /^(hospital|clinic|doctors|dentist|pharmacy|veterinary)$/.test(tags.amenity)
+  ) {
+    return 'saude'
+  }
+  if (tags.healthcare) return 'saude'
+  if (tags.shop) return 'comercio'
+  if (tags.office || tags.craft) return 'servicos'
+  if (
+    tags.amenity &&
+    /^(bank|atm|car_rental|car_wash|laundry|hairdresser|beauty_salon|fuel)$/.test(
+      tags.amenity,
+    )
+  ) {
+    return 'servicos'
+  }
+  return 'comercio'
+}
 
-function buildAroundQuery(lat: number, lon: number, radius: number): string {
-  const types = TOURISM_TYPES.join('|')
+function mapClientType(
+  category: SearchCategoryId,
+  tags: Record<string, string>,
+): ClientType {
+  if (category === 'hospedagem') return mapTourismType(tags.tourism)
+  return 'empresa'
+}
+
+function categoryLabel(id: SearchCategoryId): string {
+  return SEARCH_CATEGORIES.find((c) => c.id === id)?.label ?? id
+}
+
+function buildAroundQuery(
+  lat: number,
+  lon: number,
+  radius: number,
+  categories: SearchCategoryId[],
+): string {
+  const around = `(around:${radius},${lat},${lon})`
+  const lines = categories.flatMap((id) => CATEGORY_QUERIES[id](around))
   return `
-[out:json][timeout:25];
+[out:json][timeout:28];
 (
-  nwr["tourism"~"^(${types})$"](around:${radius},${lat},${lon});
+  ${lines.join(';\n  ')};
 );
 out center tags ${RESULT_LIMIT};
 `.trim()
@@ -92,7 +190,7 @@ async function fetchOverpass(query: string): Promise<{
 
   for (const endpoint of OVERPASS_ENDPOINTS) {
     const controller = new AbortController()
-    const timer = window.setTimeout(() => controller.abort(), 28000)
+    const timer = window.setTimeout(() => controller.abort(), 30000)
 
     try {
       const res = await fetch(endpoint, {
@@ -172,7 +270,7 @@ export async function searchPlaces(query: string): Promise<PlaceSuggestion[]> {
     },
   })
 
-  if (!res.ok) throw new Error('Falha ao buscar cidade (Nominatim)')
+  if (!res.ok) throw new Error('Falha ao buscar endereço (Nominatim)')
 
   const data = (await res.json()) as Array<{
     display_name: string
@@ -201,17 +299,22 @@ export async function searchPlaces(query: string): Promise<PlaceSuggestion[]> {
   }))
 }
 
-export async function searchHotelsAround(
+export async function searchPlacesAround(
   center: GeoPoint,
   radiusMeters: number,
-): Promise<HotelResult[]> {
+  categories: SearchCategoryId[],
+): Promise<PlaceResult[]> {
+  if (categories.length === 0) {
+    throw new Error('Selecione ao menos uma categoria.')
+  }
+
   const radius = Math.max(500, Math.min(Math.round(radiusMeters), 15000))
   const { lat, lon } = center
-  const query = buildAroundQuery(lat, lon, radius)
+  const query = buildAroundQuery(lat, lon, radius, categories)
   const data = await fetchOverpass(query)
 
   const seen = new Set<string>()
-  const results: HotelResult[] = []
+  const results: PlaceResult[] = []
 
   for (const el of data.elements ?? []) {
     const tags = el.tags ?? {}
@@ -222,6 +325,9 @@ export async function searchHotelsAround(
     const pointLon = el.lon ?? el.center?.lon
     if (pointLat == null || pointLon == null) continue
 
+    const category = detectCategory(tags)
+    if (!categories.includes(category)) continue
+
     const key = `${name.toLowerCase()}|${tags['addr:city'] ?? ''}|${pointLat.toFixed(4)}|${pointLon.toFixed(4)}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -229,7 +335,9 @@ export async function searchHotelsAround(
     results.push({
       osmId: `${el.type}/${el.id}`,
       name,
-      type: mapTourismType(tags.tourism),
+      type: mapClientType(category, tags),
+      category,
+      categoryLabel: categoryLabel(category),
       lat: pointLat,
       lon: pointLon,
       city:
@@ -252,27 +360,36 @@ export async function searchHotelsAround(
   return results.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
 }
 
-export function hotelToClientInsert(
-  hotel: HotelResult,
+/** @deprecated use searchPlacesAround */
+export async function searchHotelsAround(
+  center: GeoPoint,
+  radiusMeters: number,
+): Promise<PlaceResult[]> {
+  return searchPlacesAround(center, radiusMeters, ['hospedagem'])
+}
+
+export function placeToClientInsert(
+  place: PlaceResult,
   fallbackCity?: string | null,
   fallbackState?: string | null,
 ): ClientInsert {
-  const phone = hotel.phone
+  const phone = place.phone
   return {
-    company_name: hotel.name,
-    type: hotel.type,
-    city: hotel.city || fallbackCity || null,
-    state: hotel.state || fallbackState || null,
+    company_name: place.name,
+    type: place.type,
+    city: place.city || fallbackCity || null,
+    state: place.state || fallbackState || null,
     phone,
     whatsapp: phone,
-    email: hotel.email,
-    website: hotel.website,
+    email: place.email,
+    website: place.website,
     contact_name: null,
     contact_role: null,
     notes: [
-      hotel.address ? `Endereço OSM: ${hotel.address}` : null,
-      `Fonte: OpenStreetMap (${hotel.osmId})`,
-      `Coords: ${hotel.lat.toFixed(5)}, ${hotel.lon.toFixed(5)}`,
+      place.address ? `Endereço OSM: ${place.address}` : null,
+      `Categoria: ${place.categoryLabel}`,
+      `Fonte: OpenStreetMap (${place.osmId})`,
+      `Coords: ${place.lat.toFixed(5)}, ${place.lon.toFixed(5)}`,
     ]
       .filter(Boolean)
       .join('\n'),
@@ -280,4 +397,26 @@ export function hotelToClientInsert(
     last_contact_at: null,
     next_follow_up_at: null,
   }
+}
+
+/** @deprecated use placeToClientInsert */
+export const hotelToClientInsert = placeToClientInsert
+
+export function cityTabLabel(place: PlaceSuggestion): string {
+  const city =
+    place.city ||
+    place.displayName.split(',')[0]?.trim() ||
+    'Região'
+  const state = place.state
+  return state ? `${city}, ${state}` : city
+}
+
+export function cityTabId(place: PlaceSuggestion): string {
+  const base = cityTabLabel(place)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  return `${base}-${place.lat.toFixed(3)}-${place.lon.toFixed(3)}`
 }

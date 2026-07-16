@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -12,21 +12,30 @@ import {
   createActivity,
   fetchClient,
   fetchNextUncontacted,
+  fetchTemplates,
   updateClientStatus,
 } from '../services/clients'
-import type { Client } from '../types'
+import type { Client, MessageTemplate } from '../types'
+import { useToast } from '../context/ToastContext'
 import {
   Button,
   EmptyState,
+  Field,
+  Label,
   Page,
   PageHeader,
   PageSubtitle,
   PageTitle,
   Row,
+  Select,
   Spinner,
   Stack,
 } from '../components/ui'
-import { openEmail, openWhatsApp } from '../utils/helpers'
+import {
+  applyTemplateVars,
+  openEmail,
+  openWhatsApp,
+} from '../utils/helpers'
 
 const Stage = styled.div`
   max-width: 720px;
@@ -47,6 +56,7 @@ const Company = styled.h2`
   font-weight: ${({ theme }) => theme.fontWeights.semibold};
   letter-spacing: -0.03em;
   margin-bottom: ${({ theme }) => theme.space[2]};
+  text-wrap: balance;
 `
 
 const MetaLine = styled.p`
@@ -78,6 +88,19 @@ const Notes = styled.p`
   min-height: 72px;
 `
 
+const Preview = styled.pre`
+  white-space: pre-wrap;
+  font-family: ${({ theme }) => theme.fonts.sans};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  color: ${({ theme }) => theme.colors.ink};
+  background: ${({ theme }) => theme.colors.elevated};
+  border-radius: ${({ theme }) => theme.radii.md};
+  padding: ${({ theme }) => theme.space[4]};
+  margin-bottom: ${({ theme }) => theme.space[6]};
+  max-height: 140px;
+  overflow: auto;
+`
+
 const Actions = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -88,13 +111,31 @@ const Actions = styled.div`
   }
 `
 
+const Hint = styled.p`
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  color: ${({ theme }) => theme.colors.faint};
+  margin-top: ${({ theme }) => theme.space[4]};
+  text-align: center;
+`
+
+const TEMPLATE_STORAGE = 'crm-prospect-template-id'
+
 export function ProspectPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { toast } = useToast()
   const [client, setClient] = useState<Client | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [empty, setEmpty] = useState(false)
+  const [templates, setTemplates] = useState<MessageTemplate[]>([])
+  const [templateId, setTemplateId] = useState(() => {
+    try {
+      return localStorage.getItem(TEMPLATE_STORAGE) ?? ''
+    } catch {
+      return ''
+    }
+  })
 
   const loadClient = useCallback(async (preferredId?: string | null) => {
     setLoading(true)
@@ -123,6 +164,42 @@ export function ProspectPage() {
   useEffect(() => {
     void loadClient(params.get('id'))
   }, [params, loadClient])
+
+  useEffect(() => {
+    fetchTemplates()
+      .then((list) => {
+        setTemplates(list)
+        setTemplateId((prev) => {
+          if (prev && list.some((t) => t.id === prev)) return prev
+          return list[0]?.id ?? ''
+        })
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    try {
+      if (templateId) localStorage.setItem(TEMPLATE_STORAGE, templateId)
+    } catch {
+      // ignore
+    }
+  }, [templateId])
+
+  const selectedTemplate = useMemo(
+    () => templates.find((t) => t.id === templateId) ?? null,
+    [templates, templateId],
+  )
+
+  const messagePreview = useMemo(() => {
+    if (!client) return ''
+    if (selectedTemplate) return applyTemplateVars(selectedTemplate.body, client)
+    return `Olá${client.contact_name ? ` ${client.contact_name}` : ''}, tudo bem?`
+  }, [client, selectedTemplate])
+
+  const subjectPreview = useMemo(() => {
+    if (!client || !selectedTemplate?.subject) return 'Contato comercial'
+    return applyTemplateVars(selectedTemplate.subject, client)
+  }, [client, selectedTemplate])
 
   async function markFirstContactIfNeeded(current: Client) {
     if (current.status === 'nao_contatado') {
@@ -154,32 +231,32 @@ export function ProspectPage() {
 
   async function sendWhatsApp() {
     if (!client?.whatsapp) {
-      alert('Sem WhatsApp neste cliente.')
+      toast('Sem WhatsApp neste lead.', 'danger')
       return
     }
-    const msg = `Olá${client.contact_name ? ` ${client.contact_name}` : ''}, tudo bem?`
-    openWhatsApp(client.whatsapp, msg)
+    openWhatsApp(client.whatsapp, messagePreview)
     await createActivity({
       client_id: client.id,
       type: 'whatsapp',
-      content: msg,
+      content: messagePreview,
     })
     await markFirstContactIfNeeded(client)
+    toast('WhatsApp aberto.', 'success')
   }
 
   async function sendEmail() {
     if (!client?.email) {
-      alert('Sem email neste cliente.')
+      toast('Sem email neste lead.', 'danger')
       return
     }
-    const body = `Olá${client.contact_name ? ` ${client.contact_name}` : ''},\n\n`
-    openEmail(client.email, 'Contato comercial', body)
+    openEmail(client.email, subjectPreview, messagePreview)
     await createActivity({
       client_id: client.id,
       type: 'email',
-      content: body,
+      content: messagePreview,
     })
     await markFirstContactIfNeeded(client)
+    toast('Email aberto.', 'success')
   }
 
   async function registerCall() {
@@ -190,15 +267,35 @@ export function ProspectPage() {
       content: 'Ligação registrada no Modo Prospecção',
     })
     await markFirstContactIfNeeded(client)
+    toast('Ligação registrada.', 'success')
   }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!client || busy || loading) return
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        void goNext()
+      }
+      if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault()
+        void sendWhatsApp()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handlers use latest client via closure refresh
+  }, [client, busy, loading, messagePreview])
 
   return (
     <Page>
       <Stage>
         <PageHeader>
           <div>
-            <PageTitle>Modo Prospecção</PageTitle>
-            <PageSubtitle>Um cliente por vez. Contate e avance.</PageSubtitle>
+            <PageTitle>Prospecção</PageTitle>
+            <PageSubtitle>Um lead por vez. Contate e avance.</PageSubtitle>
           </div>
         </PageHeader>
 
@@ -207,7 +304,7 @@ export function ProspectPage() {
         ) : empty || !client ? (
           <EmptyState>
             <strong>Fila limpa</strong>
-            <span>Não há clientes com status “Não contatado”.</span>
+            <span>Não há leads com status “Não contatado”.</span>
             <Button onClick={() => navigate('/clientes')}>Ver clientes</Button>
           </EmptyState>
         ) : (
@@ -230,39 +327,71 @@ export function ProspectPage() {
             </FieldList>
 
             <Stack $gap={2}>
-              <span style={{ fontSize: '0.8125rem', color: 'oklch(0.62 0.015 230)' }}>
-                Observações
-              </span>
-              <Notes>{client.notes || 'Sem observações.'}</Notes>
+              <Label htmlFor="prospect-notes">Observações</Label>
+              <Notes id="prospect-notes">{client.notes || 'Sem observações.'}</Notes>
             </Stack>
 
+            <Field>
+              <Label htmlFor="prospect-template">Modelo de mensagem</Label>
+              <Select
+                id="prospect-template"
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+              >
+                <option value="">Mensagem simples</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Preview>{messagePreview}</Preview>
+
             <Actions>
-              <Button onClick={sendWhatsApp} disabled={busy}>
+              <Button
+                onClick={sendWhatsApp}
+                disabled={busy || !client.whatsapp}
+                title={!client.whatsapp ? 'Sem WhatsApp neste lead' : 'Atalho: W'}
+              >
                 <MessageCircle size={16} />
-                Enviar WhatsApp
+                WhatsApp
               </Button>
-              <Button $variant="secondary" onClick={sendEmail} disabled={busy}>
+              <Button
+                $variant="secondary"
+                onClick={sendEmail}
+                disabled={busy || !client.email}
+                title={!client.email ? 'Sem email neste lead' : undefined}
+              >
                 <Mail size={16} />
-                Enviar Email
+                Email
               </Button>
               <Button $variant="secondary" onClick={registerCall} disabled={busy}>
                 <Phone size={16} />
-                Registrar Ligação
+                Ligação
               </Button>
-              <Button onClick={goNext} disabled={busy} $size="lg">
+              <Button
+                $variant="secondary"
+                onClick={goNext}
+                disabled={busy}
+                $size="lg"
+                title="Atalho: Enter"
+              >
                 {busy ? (
                   '…'
                 ) : (
                   <>
                     <SkipForward size={16} />
-                    Próximo Cliente
+                    Próximo
                     <ArrowRight size={16} />
                   </>
                 )}
               </Button>
             </Actions>
 
-            <Row style={{ marginTop: 24, justifyContent: 'center' }}>
+            <Hint>W = WhatsApp · Enter = próximo</Hint>
+
+            <Row style={{ marginTop: 16, justifyContent: 'center' }}>
               <Button
                 $variant="ghost"
                 $size="sm"

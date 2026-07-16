@@ -3,6 +3,7 @@
 
 -- Enums
 create type public.client_type as enum (
+  'empresa', 'landing', 'site',
   'hotel', 'pousada', 'resort', 'hostel', 'outro'
 );
 
@@ -28,7 +29,7 @@ create table public.clients (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
   company_name text not null,
-  type public.client_type not null default 'hotel',
+  type public.client_type not null default 'empresa',
   city text,
   state text,
   phone text,

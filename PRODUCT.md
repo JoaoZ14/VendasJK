@@ -10,30 +10,30 @@ web
 
 ## Users
 
-Você — único usuário. Vendedor em ritmo de prospecção diária (hotéis, pousadas, resorts, hostels), usando o sistema várias vezes ao dia para abrir o próximo lead, contatar, registrar follow-up e avançar no pipeline.
+Você — único usuário. Freelancer/vendedor que vende landing pages, sites e outros serviços, várias vezes ao dia: abrir o próximo lead, contatar, registrar follow-up e fechar negócio. Sem equipe, sem multi-tenant.
 
 ## Product Purpose
 
-CRM pessoal para organizar prospecção, contatos, follow-ups e clientes. Existe para reduzir atrito: poucos cliques por contato, visão clara do que fazer agora, sem recursos de equipe ou SaaS. Sucesso = pipeline em dia e mais contatos úteis no menor tempo.
+CRM pessoal para organizar leads, contatos, follow-ups e clientes. Existe para reduzir atrito: poucos cliques por contato, visão clara do que fazer agora, fechar mais negócios sem virar SaaS. Sucesso = pipeline em dia, próximo contato óbvio, e mais fechamentos no menor tempo.
 
 ## Positioning
 
-CRM pessoal que parece app desktop — só o essencial para prospectar e fechar mais rápido.
+CRM pessoal objetivo — só o essencial para prospectar e fechar.
 
 ## Brand Personality
 
-**Preciso, rápido, silencioso.** Inspiração de feel: Linear (densidade limpa), Raycast (ações imediatas), Vercel (tema escuro, contidos). A interface serve o trabalho; não compete por atenção.
+**Preciso, rápido, direto.** Inspiração de feel: Linear (densidade limpa), Raycast (ações imediatas), Vercel (tema escuro contido). A interface some atrás do trabalho; não compete por atenção.
 
 ## Anti-references
 
-SaaS genérico (planos, permissões, multi-tenant). Dashboards inchados com métricas vazias. CRM enterprise (HubSpot/Salesforce). UI roxa/glow "startup AI". Formulários longos que travam o fluxo de contato.
+SaaS genérico (planos, permissões, multi-tenant). Dashboards inchados com métricas vazias. CRM enterprise (HubSpot/Salesforce). UI roxa/glow "startup AI". Formulários longos que travam o fluxo de contato. Produto amarrado a um nicho (ex.: só hotéis) quando o negócio real é vender sites e serviços.
 
 ## Design Principles
 
-1. **Um clique a menos** — cada tela existe para acelerar o próximo contato, não para exibir recursos.
-2. **Densidade com ar** — informação acessível sem ruído visual; o que importa sobe.
-3. **Ação no centro** — WhatsApp, e-mail, status e follow-up sempre à mão no contexto do cliente.
-4. **Modo foco** — o Modo Prospecção prova o produto: um cliente por vez, sem distração.
+1. **Um clique a menos** — cada tela existe para acelerar o próximo contato ou o próximo fechamento.
+2. **Objetivo acima de completo** — se não ajuda a prospectar ou fechar, sai da tela principal.
+3. **Ação no centro** — WhatsApp, e-mail, status e follow-up sempre à mão no contexto do lead.
+4. **Modo foco** — Modo Prospecção: um lead por vez, sem distração.
 5. **Silêncio visual** — animações discretas, tema escuro contido, nada que grite.
 
 ## Accessibility & Inclusion

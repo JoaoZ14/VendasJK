@@ -1,86 +1,152 @@
-<!-- SEED: re-run /impeccable document once there's code to capture the actual tokens and components. -->
 ---
 name: CRM Pessoal
-description: CRM pessoal dark, denso e silencioso — um clique a menos por contato.
+description: CRM pessoal dark, denso e direto — um clique a menos por contato.
+colors:
+  bg: "oklch(0.09 0 0)"
+  surface: "oklch(0.135 0 0)"
+  elevated: "oklch(0.17 0 0)"
+  border: "oklch(0.22 0 0)"
+  border-hover: "oklch(0.28 0 0)"
+  ink: "oklch(0.95 0.008 230)"
+  muted: "oklch(0.62 0.015 230)"
+  faint: "oklch(0.45 0.01 230)"
+  primary: "oklch(0.65 0.12 230)"
+  primary-hover: "oklch(0.70 0.13 230)"
+  primary-muted: "oklch(0.28 0.06 230)"
+  accent: "oklch(0.72 0.11 195)"
+  danger: "oklch(0.65 0.18 25)"
+  danger-muted: "oklch(0.28 0.06 25)"
+  danger-hover: "oklch(0.35 0.08 25)"
+  success: "oklch(0.72 0.14 155)"
+  success-muted: "oklch(0.26 0.05 155)"
+  warning: "oklch(0.78 0.12 85)"
+  warning-muted: "oklch(0.28 0.05 85)"
+  on-primary: "oklch(0.98 0 0)"
+typography:
+  body:
+    fontFamily: "Outfit, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: "normal"
+  title:
+    fontFamily: "Outfit, system-ui, sans-serif"
+    fontSize: "1.375rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.03em"
+  display:
+    fontFamily: "Outfit, system-ui, sans-serif"
+    fontSize: "1.75rem"
+    fontWeight: 600
+    lineHeight: 1.15
+    letterSpacing: "-0.03em"
+rounded:
+  sm: "6px"
+  md: "10px"
+  lg: "14px"
+  xl: "18px"
+spacing:
+  1: "4px"
+  2: "8px"
+  3: "12px"
+  4: "16px"
+  5: "20px"
+  6: "24px"
+  8: "32px"
+components:
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.md}"
+    padding: "10px 16px"
+    height: "38px"
+  button-primary-hover:
+    backgroundColor: "{colors.primary-hover}"
+    textColor: "{colors.bg}"
+  nav-active:
+    backgroundColor: "{colors.primary-muted}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.md}"
+  card:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.lg}"
+    padding: "16px"
 ---
 
 # Design System: CRM Pessoal
 
-## 1. Overview
+## Overview
 
 **Creative North Star: "The Quiet Desk"**
 
-Interface de ferramenta pessoal no tema escuro: densidade limpa, ações à mão, zero teatro visual. Inspirada em Linear (hierarquia e densidade), Raycast (ações imediatas) e Vercel (superfícies escuras contidas). Motion só onde há feedback útil — transição rápida, sem coreografia.
+Ferramenta pessoal dark: densidade limpa, ações à mão, zero teatro. Linear (hierarquia), Raycast (ação imediata), Vercel (superfície escura contida). Motion só como feedback — transição rápida, sem coreografia.
 
-A superfície é neutra e fria (zinc/slate). Um único accent discreto (azul ou ciano) aparece em ≤10% da UI: foco, CTA primário, estado ativo. Tipografia: uma família sans geométrica em vários pesos.
+Neutros frios (zinc). Accent ciano/azul ≤10%: foco, CTA, item ativo. Uma família sans (Outfit) em poucos pesos.
 
-Rejeita explicitamente landing "AI startup" roxa com glow, SaaS genérico, CRM enterprise inchado e dashboards de métricas vazias.
+Rejeita landing "AI startup" roxa, SaaS genérico, CRM enterprise e dashboards de métricas vazias.
 
-**Key Characteristics:**
-- Tema escuro, neutros frios, accent único e raro
-- Densidade de app desktop, não de marketing
-- Motion responsive: feedback e transition, sem entrada teatral
-- Sidebar fixa + header simples + cards modernos com sombra suave
+## Colors
 
-## 2. Colors
-
-Estratégia **Restrained**: neutros frios carregam a UI; accent ≤10%.
+Estratégia **Restrained**. Fonte de verdade: `src/styles/theme.ts` (OKLCH).
 
 ### Primary
-- **Quiet Cyan/Blue** `[to be resolved during implementation]`: único accent — botão primário, item ativo da sidebar, foco, links de ação. Raridade é o ponto.
+- **primary** `oklch(0.65 0.12 230)` — CTA, links de ação, item ativo
+- **accent** `oklch(0.72 0.11 195)` — destaque raro, secundário ao primary
 
 ### Neutral
-- **Void / Surface / Elevated** `[to be resolved during implementation]`: ramp escura zinc/slate para body, sidebar, cards e header.
-- **Ink / Muted / Faint** `[to be resolved during implementation]`: texto e secondary text com contraste ≥4.5:1 no body.
+- **bg / surface / elevated** — body, sidebar, cards
+- **ink / muted / faint** — texto; body ≥4.5:1 no fundo escuro
 
 ### Named Rules
-**The One Accent Rule.** O accent aparece em ≤10% de qualquer tela. Se a UI parecer "colorida", corte accent.
+**The One Accent Rule.** Accent ≤10% da tela. Se parecer colorida, corte.
 
-**The No Purple Rule.** Nunca roxo, índigo marketing ou glow neon. Neutros frios + um azul/ciano contido.
+**The No Purple Rule.** Nunca roxo, índigo marketing ou glow neon.
 
-## 3. Typography
+## Typography
 
-**Display Font:** `[font pairing to be chosen at implementation — geometric sans]`
-**Body Font:** mesma família, pesos médios
-**Label/Mono Font:** opcional só se labels de status pedirem; default = geometric sans
-
-**Character:** Sans geométrica técnica (precisão Linear/Vercel), nunca display serif, nunca script.
+**Display / Body:** Outfit (uma família). Escala fixa em rem, não fluid clamp.
 
 ### Hierarchy
-- **Display** `[to be resolved]`: títulos de página raros (ex.: "Próximo Cliente" no modo prospecção).
-- **Headline** `[to be resolved]`: nomes de empresa / seções.
-- **Title** `[to be resolved]`: cards e headers de painel.
-- **Body** `[to be resolved]`: dados e observações; line-length ~65–75ch em prosa.
-- **Label** `[to be resolved]`: status, filtros, metadados — sem all-caps tracked em toda seção.
+- **Display** `1.75rem` / 600 — títulos raros (ex.: nome no modo foco)
+- **Title** `1.375rem` / 600 — títulos de página
+- **Body** `0.875rem` / 400 — dados e listas
+- **Label** `0.75–0.8125rem` — status, filtros, meta
 
 ### Named Rules
-**The One Family Rule.** Uma sans geométrica. Ênfase via weight e tamanho, nunca via segunda família decorativa.
+**The One Family Rule.** Só Outfit. Ênfase via weight e tamanho.
 
-## 4. Elevation
+## Elevation
 
-Híbrido contido: superfícies tonais (bg → surface → elevated) + sombras suaves em cards e popovers. Flat no repouso da sidebar/header; lift leve em cards e modais.
-
-Motion energy **responsive** → profundidade estável, sem parallax nem glassmorphism decorativo.
+Superfícies tonais (bg → surface → elevated) + sombra suave em cards e popovers. Sidebar/header flat; lift leve em cards e modais. Sem glassmorphism decorativo (blur no header sticky é utilitário, não estética).
 
 ### Named Rules
-**The Soft Lift Rule.** Sombra só para separar superfície do fundo escuro. Se parecer flutuador neon, está errado.
+**The Soft Lift Rule.** Sombra só para separar do fundo. Sem glow.
 
-## 5. Components
+## Components
 
-*(Seed: omitido — componentes ainda não existem. Re-rodar `/impeccable document` após a primeira implementação.)*
+- **AppShell** — sidebar 240px + header 56px + content
+- **Button** — primary / secondary / ghost; altura ~38px
+- **Card** — surface + border + radius lg; sem cards aninhados
+- **StatusBadge / StatusSelect** — estados do pipeline
+- **Table** — lista densa de clientes
+- **FocusCard** — Modo Prospecção, um lead por vez
 
-## 6. Do's and Don'ts
+Estados obrigatórios em controles interativos: default, hover, focus, active, disabled, loading, error.
 
-### Do:
-- **Do** manter densidades de app (Linear/Raycast): muita informação, pouco chrome.
-- **Do** colocar ações de contato (WhatsApp, e-mail, status, follow-up) no contexto do cliente.
-- **Do** usar accent só em CTA e estado ativo.
-- **Do** respeitar `prefers-reduced-motion` (fade ou instant).
+## Do's and Don'ts
 
-### Don't:
-- **Don't** parecer landing "AI startup" roxa com glow.
-- **Don't** imitar SaaS genérico (planos, permissões, multi-tenant).
-- **Don't** montar dashboard inchado com métricas vazias.
-- **Don't** copiar CRM enterprise (HubSpot/Salesforce).
-- **Don't** usar border-left colorida >1px, gradient text, ou glassmorphism decorativo.
-- **Don't** colocar eyebrow all-caps tracked em cima de cada seção.
+### Do
+- Densidade de app (Linear/Raycast): muita informação, pouco chrome
+- Ações de contato no contexto do lead
+- Accent só em CTA e estado ativo
+- Respeitar `prefers-reduced-motion`
+
+### Don't
+- Parecer landing AI roxa com glow
+- Dashboard com métricas vazias ou 6+ KPIs competindo
+- CRM enterprise / multi-tenant
+- Border-left colorida >1px, gradient text, glassmorphism decorativo
+- Eyebrow all-caps tracked em toda seção
+- Amarrar copy/nav a um nicho (hotéis) quando o produto é CRM de vendas geral

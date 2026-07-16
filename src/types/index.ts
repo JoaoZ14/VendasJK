@@ -1,4 +1,7 @@
 export const CLIENT_TYPES = [
+  'empresa',
+  'landing',
+  'site',
   'hotel',
   'pousada',
   'resort',
@@ -103,6 +106,9 @@ export interface DashboardStats {
 }
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
+  empresa: 'Empresa',
+  landing: 'Landing page',
+  site: 'Site',
   hotel: 'Hotel',
   pousada: 'Pousada',
   resort: 'Resort',

@@ -124,12 +124,12 @@ export const Button = styled.button<{
         color: ${theme.colors.danger};
         border: 1px solid transparent;
         &:hover:not(:disabled) {
-          background: oklch(0.35 0.08 25);
+          background: ${theme.colors.dangerHover};
         }
       `
     return css`
       background: ${theme.colors.primary};
-      color: oklch(0.98 0 0);
+      color: ${theme.colors.onPrimary};
       border: 1px solid transparent;
       &:hover:not(:disabled) {
         background: ${theme.colors.primaryHover};

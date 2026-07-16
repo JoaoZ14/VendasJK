@@ -88,8 +88,8 @@ export function HotelSearchMap({
           center={[center.lat, center.lon]}
           radius={radiusMeters}
           pathOptions={{
-            color: '#4d8fd9',
-            fillColor: '#4d8fd9',
+            color: 'oklch(0.65 0.12 230)',
+            fillColor: 'oklch(0.65 0.12 230)',
             fillOpacity: 0.12,
             weight: 2,
           }}

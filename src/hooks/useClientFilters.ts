@@ -12,16 +12,51 @@ export type ClientFilter =
   | 'follow_up_hoje'
   | 'sem_contato'
 
+export const CITY_ALL = 'all'
+export const CITY_NONE = '__none__'
+
+export function cityKey(client: Pick<Client, 'city' | 'state'>): string {
+  const city = client.city?.trim()
+  if (!city) return CITY_NONE
+  const state = client.state?.trim()
+  return state ? `${city}|${state}` : city
+}
+
+export function cityLabel(key: string): string {
+  if (key === CITY_ALL) return 'Todas'
+  if (key === CITY_NONE) return 'Sem cidade'
+  const [city, state] = key.split('|')
+  return state ? `${city}, ${state}` : city
+}
+
 export function useClientFilters(clients: Client[], daysWithoutContact: number) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<ClientFilter>('all')
   const [typeFilter, setTypeFilter] = useState<ClientType | 'all'>('all')
+  const [cityFilter, setCityFilter] = useState<string>(CITY_ALL)
+
+  const cityTabs = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const c of clients) {
+      const key = cityKey(c)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    const tabs = [...counts.entries()]
+      .map(([key, count]) => ({ key, label: cityLabel(key), count }))
+      .sort((a, b) => {
+        if (a.key === CITY_NONE) return 1
+        if (b.key === CITY_NONE) return -1
+        return a.label.localeCompare(b.label, 'pt-BR')
+      })
+    return tabs
+  }, [clients])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     const cutoff = daysAgo(daysWithoutContact)
 
     return clients.filter((c) => {
+      if (cityFilter !== CITY_ALL && cityKey(c) !== cityFilter) return false
       if (typeFilter !== 'all' && c.type !== typeFilter) return false
 
       if (q) {
@@ -58,7 +93,7 @@ export function useClientFilters(clients: Client[], daysWithoutContact: number) 
           return true
       }
     })
-  }, [clients, search, filter, typeFilter, daysWithoutContact])
+  }, [clients, search, filter, typeFilter, cityFilter, daysWithoutContact])
 
   return {
     search,
@@ -67,6 +102,9 @@ export function useClientFilters(clients: Client[], daysWithoutContact: number) 
     setFilter,
     typeFilter,
     setTypeFilter,
+    cityFilter,
+    setCityFilter,
+    cityTabs,
     filtered,
   }
 }

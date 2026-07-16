@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Search, Download } from 'lucide-react'
+import { MapPin, Search, Download, X } from 'lucide-react'
 import styled from 'styled-components'
 import { HotelSearchMap } from '../components/HotelSearchMap'
 import {
@@ -22,12 +22,40 @@ import {
 import { CLIENT_TYPE_LABELS } from '../types'
 import { createClientsBulk, fetchClients } from '../services/clients'
 import {
-  hotelToClientInsert,
-  searchHotelsAround,
+  cityTabId,
+  cityTabLabel,
+  DEFAULT_SEARCH_CATEGORIES,
+  placeToClientInsert,
+  SEARCH_CATEGORIES,
   searchPlaces,
-  type HotelResult,
+  searchPlacesAround,
+  type PlaceResult,
   type PlaceSuggestion,
+  type SearchCategoryId,
 } from '../services/geo'
+
+const STORAGE_KEY = 'crm-place-search-tabs'
+const MAX_TABS = 8
+
+interface CityTab {
+  id: string
+  label: string
+  place: PlaceSuggestion | null
+  center: { lat: number; lon: number }
+  radiusKm: number
+  categories: SearchCategoryId[]
+  results: PlaceResult[]
+  selected: string[]
+  onlyWithPhone: boolean
+  onlyWithEmail: boolean
+  onlyWithWebsite: boolean
+  cityQuery: string
+}
+
+interface StoredSearch {
+  tabs: CityTab[]
+  activeTabId: string | null
+}
 
 const Layout = styled.div`
   display: grid;
@@ -103,6 +131,45 @@ const Slider = styled.input`
   accent-color: ${({ theme }) => theme.colors.primary};
 `
 
+const TabBar = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${({ theme }) => theme.space[2]};
+  margin-bottom: ${({ theme }) => theme.space[4]};
+`
+
+const Tab = styled.button<{ $active?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: ${({ theme }) => theme.space[2]};
+  height: 34px;
+  padding: 0 ${({ theme }) => theme.space[3]};
+  border-radius: ${({ theme }) => theme.radii.md};
+  font-size: ${({ theme }) => theme.fontSizes.sm};
+  font-weight: ${({ theme }) => theme.fontWeights.medium};
+  border: 1px solid
+    ${({ theme, $active }) =>
+      $active ? theme.colors.primary : theme.colors.border};
+  background: ${({ theme, $active }) =>
+    $active ? theme.colors.primaryMuted : theme.colors.surface};
+  color: ${({ theme, $active }) =>
+    $active ? theme.colors.primary : theme.colors.muted};
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.ink};
+    border-color: ${({ theme }) => theme.colors.borderHover};
+  }
+`
+
+const TabClose = styled.span`
+  display: inline-flex;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+`
+
 const DEFAULT_CENTER = { lat: -23.5505, lon: -46.6333 }
 
 function normalizeName(value: string): string {
@@ -113,44 +180,112 @@ function normalizeName(value: string): string {
     .trim()
 }
 
+function emptyTab(partial?: Partial<CityTab>): CityTab {
+  return {
+    id: `draft-${Date.now()}`,
+    label: 'Nova busca',
+    place: null,
+    center: DEFAULT_CENTER,
+    radiusKm: 5,
+    categories: [...DEFAULT_SEARCH_CATEGORIES],
+    results: [],
+    selected: [],
+    onlyWithPhone: false,
+    onlyWithEmail: false,
+    onlyWithWebsite: false,
+    cityQuery: '',
+    ...partial,
+  }
+}
+
+function loadStored(): StoredSearch {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return { tabs: [], activeTabId: null }
+    const parsed = JSON.parse(raw) as StoredSearch
+    if (!Array.isArray(parsed.tabs)) return { tabs: [], activeTabId: null }
+    return parsed
+  } catch {
+    return { tabs: [], activeTabId: null }
+  }
+}
+
 export function HotelSearchPage() {
   const navigate = useNavigate()
-  const [cityQuery, setCityQuery] = useState('')
+  const stored = useMemo(() => loadStored(), [])
+
+  const [tabs, setTabs] = useState<CityTab[]>(() =>
+    stored.tabs.length > 0 ? stored.tabs : [],
+  )
+  const [activeTabId, setActiveTabId] = useState<string | null>(
+    () => stored.activeTabId ?? stored.tabs[0]?.id ?? null,
+  )
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([])
-  const [place, setPlace] = useState<PlaceSuggestion | null>(null)
-  const [center, setCenter] = useState(DEFAULT_CENTER)
-  const [radiusKm, setRadiusKm] = useState(5)
-  const [hotels, setHotels] = useState<HotelResult[]>([])
-  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [searchingCity, setSearchingCity] = useState(false)
-  const [searchingHotels, setSearchingHotels] = useState(false)
+  const [searchingPlaces, setSearchingPlaces] = useState(false)
   const [importing, setImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [onlyWithPhone, setOnlyWithPhone] = useState(false)
-  const [onlyWithEmail, setOnlyWithEmail] = useState(false)
-  const [onlyWithWebsite, setOnlyWithWebsite] = useState(false)
+  const [showContactFilters, setShowContactFilters] = useState(false)
+
+  const activeTab = useMemo(() => {
+    if (!activeTabId) return null
+    return tabs.find((t) => t.id === activeTabId) ?? null
+  }, [tabs, activeTabId])
+
+  const draftQuery = activeTab?.cityQuery ?? ''
+  const center = activeTab?.center ?? DEFAULT_CENTER
+  const radiusKm = activeTab?.radiusKm ?? 5
+  const categories = activeTab?.categories ?? DEFAULT_SEARCH_CATEGORIES
+  const results = activeTab?.results ?? []
+  const selected = useMemo(
+    () => new Set(activeTab?.selected ?? []),
+    [activeTab?.selected],
+  )
+  const onlyWithPhone = activeTab?.onlyWithPhone ?? false
+  const onlyWithEmail = activeTab?.onlyWithEmail ?? false
+  const onlyWithWebsite = activeTab?.onlyWithWebsite ?? false
+  const place = activeTab?.place ?? null
 
   const radiusMeters = radiusKm * 1000
 
-  const filteredHotels = useMemo(() => {
-    return hotels.filter((h) => {
+  useEffect(() => {
+    const payload: StoredSearch = { tabs, activeTabId }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch {
+      // quota / private mode — ignore
+    }
+  }, [tabs, activeTabId])
+
+  const updateActive = useCallback(
+    (patch: Partial<CityTab>) => {
+      if (!activeTabId) return
+      setTabs((prev) =>
+        prev.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t)),
+      )
+    },
+    [activeTabId],
+  )
+
+  const filteredResults = useMemo(() => {
+    return results.filter((h) => {
       if (onlyWithPhone && !h.phone) return false
       if (onlyWithEmail && !h.email) return false
       if (onlyWithWebsite && !h.website) return false
       return true
     })
-  }, [hotels, onlyWithPhone, onlyWithEmail, onlyWithWebsite])
+  }, [results, onlyWithPhone, onlyWithEmail, onlyWithWebsite])
 
   const markers = useMemo(
     () =>
-      filteredHotels.map((h) => ({
+      filteredResults.map((h) => ({
         id: h.osmId,
         lat: h.lat,
         lon: h.lon,
         name: h.name,
       })),
-    [filteredHotels],
+    [filteredResults],
   )
 
   async function handleCitySearch() {
@@ -158,66 +293,193 @@ export function HotelSearchPage() {
     setInfo(null)
     setSearchingCity(true)
     try {
-      const results = await searchPlaces(cityQuery)
-      setSuggestions(results)
-      if (results.length === 0) {
-        setInfo('Nenhuma cidade encontrada. Tente outro nome.')
+      const found = await searchPlaces(draftQuery)
+      setSuggestions(found)
+      if (found.length === 0) {
+        setInfo('Nenhum endereço encontrado. Tente outro nome.')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro na busca de cidade')
+      setError(err instanceof Error ? err.message : 'Erro na busca de endereço')
     } finally {
       setSearchingCity(false)
     }
   }
 
-  function pickPlace(suggestion: PlaceSuggestion) {
-    setPlace(suggestion)
-    setCenter({ lat: suggestion.lat, lon: suggestion.lon })
-    setSuggestions([])
-    setCityQuery(suggestion.displayName.split(',')[0] ?? suggestion.displayName)
-    setHotels([])
-    setSelected(new Set())
+  function ensureActiveTab(): string {
+    if (activeTabId && tabs.some((t) => t.id === activeTabId)) {
+      return activeTabId
+    }
+    const draft = emptyTab()
+    setTabs((prev) => [...prev, draft])
+    setActiveTabId(draft.id)
+    return draft.id
   }
 
-  async function handleHotelSearch() {
+  function pickPlace(suggestion: PlaceSuggestion) {
     setError(null)
     setInfo(null)
-    setSearchingHotels(true)
+    setSuggestions([])
+
+    const id = cityTabId(suggestion)
+    const label = cityTabLabel(suggestion)
+    const existing = tabs.find((t) => t.id === id)
+
+    if (existing) {
+      setActiveTabId(existing.id)
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === existing.id
+            ? {
+                ...t,
+                place: suggestion,
+                center: { lat: suggestion.lat, lon: suggestion.lon },
+                cityQuery: label,
+              }
+            : t,
+        ),
+      )
+      return
+    }
+
+    const nextTab = emptyTab({
+      id,
+      label,
+      place: suggestion,
+      center: { lat: suggestion.lat, lon: suggestion.lon },
+      cityQuery: label,
+      categories: activeTab?.categories ?? [...DEFAULT_SEARCH_CATEGORIES],
+      radiusKm: activeTab?.radiusKm ?? 5,
+    })
+
+    setTabs((prev) => {
+      const withoutDraft = prev.filter((t) => !t.id.startsWith('draft-'))
+      const capped =
+        withoutDraft.length >= MAX_TABS
+          ? withoutDraft.slice(withoutDraft.length - MAX_TABS + 1)
+          : withoutDraft
+      return [...capped, nextTab]
+    })
+    setActiveTabId(id)
+  }
+
+  function closeTab(id: string, e: MouseEvent) {
+    e.stopPropagation()
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== id)
+      if (activeTabId === id) {
+        setActiveTabId(next[next.length - 1]?.id ?? null)
+      }
+      return next
+    })
+    setSuggestions([])
+    setError(null)
+    setInfo(null)
+  }
+
+  function startNewTab() {
+    setTabs((prev) => {
+      if (prev.length >= MAX_TABS) {
+        setInfo(`Limite de ${MAX_TABS} cidades. Feche uma aba para abrir outra.`)
+        return prev
+      }
+      const draft = emptyTab()
+      setActiveTabId(draft.id)
+      setSuggestions([])
+      setError(null)
+      setInfo(null)
+      return [...prev, draft]
+    })
+  }
+
+  function toggleCategory(id: SearchCategoryId) {
+    setTabs((prev) => {
+      let list = prev
+      let tabId = activeTabId
+      if (!tabId || !prev.some((t) => t.id === tabId)) {
+        const draft = emptyTab()
+        list = [...prev, draft]
+        tabId = draft.id
+        setActiveTabId(tabId)
+      }
+      return list.map((t) => {
+        if (t.id !== tabId) return t
+        const has = t.categories.includes(id)
+        const nextCats = has
+          ? t.categories.filter((c) => c !== id)
+          : [...t.categories, id]
+        return {
+          ...t,
+          categories: nextCats.length > 0 ? nextCats : t.categories,
+        }
+      })
+    })
+  }
+
+  async function handlePlaceSearch() {
+    let tab = activeTab
+    if (!tab) {
+      tab = emptyTab({
+        cityQuery: draftQuery,
+        center,
+        radiusKm,
+        categories: [...categories],
+      })
+      setTabs((prev) => [...prev, tab!])
+      setActiveTabId(tab.id)
+    }
+
+    setError(null)
+    setInfo(null)
+    setSearchingPlaces(true)
     try {
-      const results = await searchHotelsAround(center, radiusMeters)
-      setHotels(results)
-      setSelected(new Set(results.map((r) => r.osmId)))
-      if (results.length === 0) {
+      const found = await searchPlacesAround(
+        tab.center,
+        tab.radiusKm * 1000,
+        tab.categories,
+      )
+      const tabId = tab.id
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === tabId
+            ? {
+                ...t,
+                results: found,
+                selected: found.filter((r) => r.phone).map((r) => r.osmId),
+                onlyWithPhone: false,
+              }
+            : t,
+        ),
+      )
+      if (found.length === 0) {
         setInfo(
-          'Nenhum hotel/pousada encontrado nesse raio no OpenStreetMap. Aumente o raio ou mude o ponto.',
+          'Nenhum estabelecimento nesse raio no OpenStreetMap. Aumente o raio, mude o ponto ou as categorias.',
         )
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro na busca de hotéis')
+      setError(err instanceof Error ? err.message : 'Erro na busca')
     } finally {
-      setSearchingHotels(false)
+      setSearchingPlaces(false)
     }
   }
 
   function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+    updateActive({
+      selected: selected.has(id)
+        ? [...selected].filter((x) => x !== id)
+        : [...selected, id],
     })
   }
 
   function selectAll() {
-    setSelected(new Set(filteredHotels.map((h) => h.osmId)))
+    updateActive({ selected: filteredResults.map((h) => h.osmId) })
   }
 
   function selectNone() {
-    setSelected(new Set())
+    updateActive({ selected: [] })
   }
 
   async function handleImport() {
-    const picked = hotels.filter((h) => selected.has(h.osmId))
+    const picked = results.filter((h) => selected.has(h.osmId))
     if (picked.length === 0) {
       setError('Selecione ao menos um estabelecimento.')
       return
@@ -251,7 +513,7 @@ export function HotelSearchPage() {
       }
 
       const rows = toImport.map((h) =>
-        hotelToClientInsert(h, place?.city, place?.state),
+        placeToClientInsert(h, place?.city, place?.state),
       )
       await createClientsBulk(rows)
 
@@ -268,13 +530,23 @@ export function HotelSearchPage() {
     }
   }
 
+  function onQueryChange(value: string) {
+    if (!activeTabId) {
+      const draft = emptyTab({ cityQuery: value })
+      setTabs([draft])
+      setActiveTabId(draft.id)
+      return
+    }
+    updateActive({ cityQuery: value })
+  }
+
   return (
     <Page>
       <PageHeader>
         <div>
-          <PageTitle>Buscar hotéis</PageTitle>
+          <PageTitle>Buscar</PageTitle>
           <PageSubtitle>
-            Mapa gratuito (OpenStreetMap) · clique no mapa ou busque por cidade
+            Endereço + mapa · abas por cidade · várias categorias
           </PageSubtitle>
         </div>
         <Button
@@ -286,17 +558,46 @@ export function HotelSearchPage() {
         </Button>
       </PageHeader>
 
+      <TabBar>
+        {tabs.map((t) => (
+          <Tab
+            key={t.id}
+            type="button"
+            $active={t.id === activeTabId}
+            onClick={() => {
+              setActiveTabId(t.id)
+              setSuggestions([])
+              setError(null)
+              setInfo(null)
+            }}
+          >
+            <MapPin size={14} />
+            {t.label}
+            <TabClose
+              role="button"
+              aria-label={`Fechar ${t.label}`}
+              onClick={(e) => closeTab(t.id, e)}
+            >
+              <X size={14} />
+            </TabClose>
+          </Tab>
+        ))}
+        <ChipButton type="button" onClick={startNewTab}>
+          + Cidade
+        </ChipButton>
+      </TabBar>
+
       <Layout>
         <Stack $gap={4}>
           <Card>
             <Stack $gap={3}>
-              <Label htmlFor="city">Cidade ou região</Label>
+              <Label htmlFor="city">Cidade ou endereço</Label>
               <Row>
                 <Input
                   id="city"
                   placeholder="Ex.: Gramado, RS"
-                  value={cityQuery}
-                  onChange={(e) => setCityQuery(e.target.value)}
+                  value={draftQuery}
+                  onChange={(e) => onQueryChange(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') void handleCitySearch()
                   }}
@@ -304,7 +605,7 @@ export function HotelSearchPage() {
                 <Button
                   $variant="secondary"
                   onClick={handleCitySearch}
-                  disabled={searchingCity || cityQuery.trim().length < 2}
+                  disabled={searchingCity || draftQuery.trim().length < 2}
                 >
                   {searchingCity ? <Spinner /> : <Search size={16} />}
                   Buscar
@@ -327,9 +628,23 @@ export function HotelSearchPage() {
               )}
 
               <div>
-                <Label htmlFor="radius">
-                  Raio: {radiusKm} km
-                </Label>
+                <Label>Categorias</Label>
+                <Row $gap={2} style={{ flexWrap: 'wrap', marginTop: 8 }}>
+                  {SEARCH_CATEGORIES.map((c) => (
+                    <ChipButton
+                      key={c.id}
+                      type="button"
+                      $active={categories.includes(c.id)}
+                      onClick={() => toggleCategory(c.id)}
+                    >
+                      {c.label}
+                    </ChipButton>
+                  ))}
+                </Row>
+              </div>
+
+              <div>
+                <Label htmlFor="radius">Raio: {radiusKm} km</Label>
                 <Slider
                   id="radius"
                   type="range"
@@ -337,29 +652,43 @@ export function HotelSearchPage() {
                   max={15}
                   step={1}
                   value={radiusKm}
-                  onChange={(e) => setRadiusKm(Number(e.target.value))}
+                  onChange={(e) => {
+                    const km = Number(e.target.value)
+                    setTabs((prev) => {
+                      let list = prev
+                      let tabId = activeTabId
+                      if (!tabId || !prev.some((t) => t.id === tabId)) {
+                        const draft = emptyTab({ radiusKm: km })
+                        list = [...prev, draft]
+                        tabId = draft.id
+                        setActiveTabId(tabId)
+                      }
+                      return list.map((t) =>
+                        t.id === tabId ? { ...t, radiusKm: km } : t,
+                      )
+                    })
+                  }}
                 />
               </div>
 
               <Hint>
-                Clique no mapa para posicionar o centro do raio
-                {place ? ` · região: ${place.city || cityQuery}` : ''}.
-                A busca limita a 100 resultados por vez.
+                Categorias padrão: Comércio e Serviços. Pré-seleção: só com
+                telefone.
               </Hint>
 
               <Button
-                onClick={handleHotelSearch}
-                disabled={searchingHotels}
+                onClick={handlePlaceSearch}
+                disabled={searchingPlaces || categories.length === 0}
                 $size="lg"
               >
-                {searchingHotels
-                  ? 'Consultando OpenStreetMap…'
-                  : (
-                    <>
-                      <Search size={16} />
-                      Buscar hotéis neste raio
-                    </>
-                  )}
+                {searchingPlaces ? (
+                  'Consultando OpenStreetMap…'
+                ) : (
+                  <>
+                    <Search size={16} />
+                    Buscar neste raio
+                  </>
+                )}
               </Button>
             </Stack>
           </Card>
@@ -369,9 +698,19 @@ export function HotelSearchPage() {
             radiusMeters={radiusMeters}
             hotelMarkers={markers}
             onPickCenter={(lat, lon) => {
-              setCenter({ lat, lon })
-              setHotels([])
-              setSelected(new Set())
+              const tabId = ensureActiveTab()
+              setTabs((prev) =>
+                prev.map((t) =>
+                  t.id === tabId
+                    ? {
+                        ...t,
+                        center: { lat, lon },
+                        results: [],
+                        selected: [],
+                      }
+                    : t,
+                ),
+              )
             }}
           />
         </Stack>
@@ -380,15 +719,15 @@ export function HotelSearchPage() {
           <Row style={{ justifyContent: 'space-between', marginBottom: 12 }}>
             <strong>
               Resultados{' '}
-              {hotels.length > 0
-                ? `(${filteredHotels.length}${
-                    filteredHotels.length !== hotels.length
-                      ? ` de ${hotels.length}`
+              {results.length > 0
+                ? `(${filteredResults.length}${
+                    filteredResults.length !== results.length
+                      ? ` de ${results.length}`
                       : ''
                   })`
                 : ''}
             </strong>
-            {filteredHotels.length > 0 && (
+            {filteredResults.length > 0 && (
               <Row $gap={2}>
                 <ChipButton type="button" onClick={selectAll}>
                   Todos
@@ -400,32 +739,50 @@ export function HotelSearchPage() {
             )}
           </Row>
 
-          {hotels.length > 0 && (
+          {results.length > 0 && (
             <Stack $gap={2} style={{ marginBottom: 12 }}>
-              <Label>Filtrar resultados</Label>
-              <Row $gap={2} style={{ flexWrap: 'wrap' }}>
-                <ChipButton
-                  type="button"
-                  $active={onlyWithPhone}
-                  onClick={() => setOnlyWithPhone((v) => !v)}
-                >
-                  Com telefone
-                </ChipButton>
-                <ChipButton
-                  type="button"
-                  $active={onlyWithEmail}
-                  onClick={() => setOnlyWithEmail((v) => !v)}
-                >
-                  Com email
-                </ChipButton>
-                <ChipButton
-                  type="button"
-                  $active={onlyWithWebsite}
-                  onClick={() => setOnlyWithWebsite((v) => !v)}
-                >
-                  Com site
-                </ChipButton>
-              </Row>
+              <ChipButton
+                type="button"
+                $active={showContactFilters || onlyWithPhone || onlyWithEmail || onlyWithWebsite}
+                onClick={() => setShowContactFilters((v) => !v)}
+              >
+                Filtros de contato
+              </ChipButton>
+              {showContactFilters && (
+                <Row $gap={2} style={{ flexWrap: 'wrap' }}>
+                  <ChipButton
+                    type="button"
+                    $active={onlyWithPhone}
+                    onClick={() =>
+                      updateActive({ onlyWithPhone: !onlyWithPhone })
+                    }
+                  >
+                    Com telefone
+                  </ChipButton>
+                  <ChipButton
+                    type="button"
+                    $active={onlyWithEmail}
+                    onClick={() =>
+                      updateActive({ onlyWithEmail: !onlyWithEmail })
+                    }
+                  >
+                    Com email
+                  </ChipButton>
+                  <ChipButton
+                    type="button"
+                    $active={onlyWithWebsite}
+                    onClick={() =>
+                      updateActive({ onlyWithWebsite: !onlyWithWebsite })
+                    }
+                  >
+                    Com site
+                  </ChipButton>
+                </Row>
+              )}
+              <Hint>
+                Pré-selecionados: só quem tem telefone no OSM (melhor para
+                WhatsApp).
+              </Hint>
             </Stack>
           )}
 
@@ -436,36 +793,34 @@ export function HotelSearchPage() {
             </EmptyState>
           )}
 
-          {!error && info && hotels.length === 0 && (
+          {!error && info && results.length === 0 && (
             <EmptyState>
               <strong>Aviso</strong>
               <span>{info}</span>
             </EmptyState>
           )}
 
-          {!error && hotels.length === 0 && !info && (
+          {!error && results.length === 0 && !info && (
             <EmptyState>
               <strong>Nada ainda</strong>
               <span>
-                Busque uma cidade ou clique no mapa, ajuste o raio e rode a
-                busca.
+                Busque um endereço, escolha a sugestão (vira aba da cidade),
+                marque categorias e rode a busca.
               </span>
             </EmptyState>
           )}
 
-          {!error &&
-            hotels.length > 0 &&
-            filteredHotels.length === 0 && (
-              <EmptyState>
-                <strong>Nenhum no filtro</strong>
-                <span>
-                  Há {hotels.length} resultados, mas nenhum passa nos filtros
-                  ativos.
-                </span>
-              </EmptyState>
-            )}
+          {!error && results.length > 0 && filteredResults.length === 0 && (
+            <EmptyState>
+              <strong>Nenhum no filtro</strong>
+              <span>
+                Há {results.length} resultados, mas nenhum passa nos filtros
+                ativos.
+              </span>
+            </EmptyState>
+          )}
 
-          {filteredHotels.map((h) => (
+          {filteredResults.map((h) => (
             <ResultItem key={h.osmId}>
               <input
                 type="checkbox"
@@ -474,8 +829,9 @@ export function HotelSearchPage() {
               />
               <div>
                 <strong>{h.name}</strong>
-                <Row $gap={2} style={{ margin: '4px 0' }}>
-                  <Badge $tone="primary">{CLIENT_TYPE_LABELS[h.type]}</Badge>
+                <Row $gap={2} style={{ margin: '4px 0', flexWrap: 'wrap' }}>
+                  <Badge $tone="primary">{h.categoryLabel}</Badge>
+                  <Badge>{CLIENT_TYPE_LABELS[h.type]}</Badge>
                   {(h.city || place?.city) && (
                     <small>
                       {[h.city || place?.city, h.state || place?.state]
@@ -492,7 +848,7 @@ export function HotelSearchPage() {
             </ResultItem>
           ))}
 
-          {info && hotels.length > 0 && (
+          {info && results.length > 0 && (
             <Hint style={{ marginTop: 12 }}>{info}</Hint>
           )}
         </ResultsPanel>

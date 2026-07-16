@@ -103,29 +103,6 @@ const Main = styled.div`
   min-width: 0;
 `
 
-const Header = styled.header`
-  position: sticky;
-  top: 0;
-  z-index: ${theme.z.sticky};
-  height: ${theme.layout.headerHeight};
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 ${theme.space[6]};
-  background: oklch(0.09 0 0 / 0.85);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid ${theme.colors.border};
-
-  @media (max-width: 900px) {
-    padding: 0 ${theme.space[4]};
-  }
-`
-
-const HeaderHint = styled.p`
-  font-size: ${theme.fontSizes.sm};
-  color: ${theme.colors.muted};
-`
-
 const Content = styled.main`
   flex: 1;
   padding: ${theme.space[6]};
@@ -138,8 +115,8 @@ const Content = styled.main`
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/clientes', label: 'Clientes', icon: Users },
-  { to: '/buscar-hoteis', label: 'Buscar hotéis', icon: MapPinned },
-  { to: '/prospeccao', label: 'Modo Prospecção', icon: Crosshair },
+  { to: '/buscar', label: 'Buscar', icon: MapPinned },
+  { to: '/prospeccao', label: 'Prospecção', icon: Crosshair },
   { to: '/modelos', label: 'Modelos', icon: MessageSquareText },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]
@@ -174,10 +151,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Button>
       </Sidebar>
       <Main>
-        <Header>
-          <HeaderHint>Poucos cliques. Próximo contato.</HeaderHint>
-          <HeaderHint>Dados no Supabase</HeaderHint>
-        </Header>
         <Content>{children}</Content>
       </Main>
     </Shell>
