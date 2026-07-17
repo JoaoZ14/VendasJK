@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Search, Download, X } from 'lucide-react'
+import { MapPin, Search, Download, X, Mail } from 'lucide-react'
 import styled from 'styled-components'
 import { HotelSearchMap } from '../components/HotelSearchMap'
 import {
@@ -33,6 +33,7 @@ import {
   type PlaceSuggestion,
   type SearchCategoryId,
 } from '../services/geo'
+import { prepareFirstContactEmail } from '../utils/emailTemplate'
 
 const STORAGE_KEY = 'crm-place-search-tabs'
 const MAX_TABS = 8
@@ -94,6 +95,31 @@ const ResultItem = styled.label`
   small {
     color: ${({ theme }) => theme.colors.muted};
     font-size: ${({ theme }) => theme.fontSizes.xs};
+  }
+`
+
+const MailBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: ${({ theme }) => theme.radii.md};
+  border: 1px solid ${({ theme }) => theme.colors.border};
+  background: ${({ theme }) => theme.colors.elevated};
+  color: ${({ theme }) => theme.colors.ink};
+  font-size: ${({ theme }) => theme.fontSizes.xs};
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.primary};
+    color: ${({ theme }) => theme.colors.primary};
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: wait;
   }
 `
 
@@ -227,6 +253,7 @@ export function HotelSearchPage() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [showContactFilters, setShowContactFilters] = useState(false)
+  const [preparingEmailId, setPreparingEmailId] = useState<string | null>(null)
 
   const activeTab = useMemo(() => {
     if (!activeTabId) return null
@@ -540,6 +567,29 @@ export function HotelSearchPage() {
     updateActive({ cityQuery: value })
   }
 
+  async function handlePrepareEmail(hotel: PlaceResult, event: MouseEvent) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!hotel.email) return
+
+    setPreparingEmailId(hotel.osmId)
+    setError(null)
+    try {
+      await prepareFirstContactEmail(hotel.email, hotel.name)
+      setInfo(
+        `E-mail de ${hotel.name} copiado. Cole no corpo do Gmail com Ctrl+V e envie.`,
+      )
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível preparar o e-mail. Copie o HTML manualmente.',
+      )
+    } finally {
+      setPreparingEmailId(null)
+    }
+  }
+
   return (
     <Page>
       <PageHeader>
@@ -844,6 +894,18 @@ export function HotelSearchPage() {
                   {[h.phone, h.email, h.website].filter(Boolean).join(' · ') ||
                     'Sem telefone/email no OSM'}
                 </small>
+                {h.email && (
+                  <MailBtn
+                    type="button"
+                    disabled={preparingEmailId === h.osmId}
+                    onClick={(e) => void handlePrepareEmail(h, e)}
+                  >
+                    <Mail size={14} />
+                    {preparingEmailId === h.osmId
+                      ? 'Preparando…'
+                      : 'Preparar e-mail'}
+                  </MailBtn>
+                )}
               </div>
             </ResultItem>
           ))}

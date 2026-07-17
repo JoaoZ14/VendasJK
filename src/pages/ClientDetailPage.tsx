@@ -54,10 +54,10 @@ import {
   formatDate,
   formatDateTime,
   fromDateInputValue,
-  openEmail,
   openWhatsApp,
   toDateInputValue,
 } from '../utils/helpers'
+import { prepareFirstContactEmail } from '../utils/emailTemplate'
 
 const Grid = styled.div`
   display: grid;
@@ -176,11 +176,6 @@ export function ClientDetailPage() {
     return applyTemplateVars(selectedTemplate.body, client)
   }, [client, selectedTemplate])
 
-  const subjectPreview = useMemo(() => {
-    if (!client || !selectedTemplate?.subject) return 'Contato comercial'
-    return applyTemplateVars(selectedTemplate.subject, client)
-  }, [client, selectedTemplate])
-
   async function handleStatus(status: ClientStatus) {
     if (!client) return
     const updated = await updateClientStatus(client.id, status)
@@ -241,19 +236,30 @@ export function ClientDetailPage() {
       toast('Cliente sem email cadastrado.', 'danger')
       return
     }
-    const body =
-      messagePreview ||
-      `Olá${client.contact_name ? ` ${client.contact_name}` : ''},\n\n`
-    openEmail(client.email, subjectPreview, body)
-    await createActivity({
-      client_id: client.id,
-      type: 'email',
-      content: body,
-    })
-    if (client.status === 'nao_contatado') {
-      await handleStatus('primeiro_contato')
+    try {
+      const { subject } = await prepareFirstContactEmail(
+        client.email,
+        client.company_name,
+      )
+      await createActivity({
+        client_id: client.id,
+        type: 'email',
+        content: `E-mail preparado: ${subject}`,
+      })
+      if (client.status === 'nao_contatado') {
+        await handleStatus('primeiro_contato')
+      }
+      await load()
+      alert(
+        'HTML copiado. Cole no corpo do Gmail com Ctrl+V e envie.',
+      )
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível preparar o e-mail.',
+      )
     }
-    await load()
   }
 
   async function handleCall() {

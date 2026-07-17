@@ -33,9 +33,9 @@ import {
 } from '../components/ui'
 import {
   applyTemplateVars,
-  openEmail,
   openWhatsApp,
 } from '../utils/helpers'
+import { prepareFirstContactEmail } from '../utils/emailTemplate'
 
 const Stage = styled.div`
   max-width: 720px;
@@ -196,11 +196,6 @@ export function ProspectPage() {
     return `Olá${client.contact_name ? ` ${client.contact_name}` : ''}, tudo bem?`
   }, [client, selectedTemplate])
 
-  const subjectPreview = useMemo(() => {
-    if (!client || !selectedTemplate?.subject) return 'Contato comercial'
-    return applyTemplateVars(selectedTemplate.subject, client)
-  }, [client, selectedTemplate])
-
   async function markFirstContactIfNeeded(current: Client) {
     if (current.status === 'nao_contatado') {
       const updated = await updateClientStatus(current.id, 'primeiro_contato')
@@ -249,14 +244,26 @@ export function ProspectPage() {
       toast('Sem email neste lead.', 'danger')
       return
     }
-    openEmail(client.email, subjectPreview, messagePreview)
-    await createActivity({
-      client_id: client.id,
-      type: 'email',
-      content: messagePreview,
-    })
-    await markFirstContactIfNeeded(client)
-    toast('Email aberto.', 'success')
+    try {
+      const { subject } = await prepareFirstContactEmail(
+        client.email,
+        client.company_name,
+      )
+      await createActivity({
+        client_id: client.id,
+        type: 'email',
+        content: `E-mail preparado: ${subject}`,
+      })
+      await markFirstContactIfNeeded(client)
+      toast('HTML copiado. Cole no corpo do Gmail com Ctrl+V e envie.', 'success')
+    } catch (err) {
+      toast(
+        err instanceof Error
+          ? err.message
+          : 'Não foi possível preparar o e-mail.',
+        'danger',
+      )
+    }
   }
 
   async function registerCall() {
